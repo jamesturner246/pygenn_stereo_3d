@@ -7,17 +7,17 @@ from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 #----------------------------------------------------------------------------
 
 spike_input = genn_model.create_custom_neuron_class(
-    'spike_input',
+    "spike_input",
 
-    var_name_types=[('input', 'scalar', VarAccess_READ_ONLY_DUPLICATE)],
+    var_name_types=[("input", "scalar", VarAccess_READ_ONLY_DUPLICATE)],
 
-    sim_code='''
+    sim_code="""
     const bool spike = $(input) != 0.0;
-    ''',
+    """,
 
-    threshold_condition_code='''
+    threshold_condition_code="""
     spike
-    ''',
+    """,
 
     is_auto_refractory_required=False,
 )
@@ -56,7 +56,7 @@ LIF = genn_model.create_custom_neuron_class(
 #----------------------------------------------------------------------------
 
 retina_L_coincidence_syn_init = genn_model.create_custom_sparse_connect_init_snippet_class(
-    "retina_L_coincidence_syn",
+    "retina_L_coincidence_syn_init",
 
     param_names=[
         "cam_height",
@@ -83,7 +83,7 @@ retina_L_coincidence_syn_init = genn_model.create_custom_sparse_connect_init_sni
 )
 
 retina_R_coincidence_syn_init = genn_model.create_custom_sparse_connect_init_snippet_class(
-    "retina_R_coincidence_syn",
+    "retina_R_coincidence_syn_init",
 
     param_names=[
         "cam_height",
@@ -112,7 +112,7 @@ retina_R_coincidence_syn_init = genn_model.create_custom_sparse_connect_init_sni
 
 #  C+  =   {  c in C  |  (|x_c - x_d| <= U)  and  (|y_c - y_d| <= U)  and  (d_c == d_d)  }
 coincidence_disparity_exc_syn_init = genn_model.create_custom_sparse_connect_init_snippet_class(
-    "coincidence_disparity_exc_syn",
+    "coincidence_disparity_exc_syn_init",
 
     param_names=[
         "cam_height",
@@ -152,7 +152,7 @@ coincidence_disparity_exc_syn_init = genn_model.create_custom_sparse_connect_ini
 
 #  C-  =   {  c in C  |  (x_c == x_d)  and  (|y_c - y_d| <= U)  and  (|d_c - d_d| <= U)  }
 coincidence_disparity_inh_syn_init = genn_model.create_custom_sparse_connect_init_snippet_class(
-    "coincidence_disparity_inh_syn",
+    "coincidence_disparity_inh_syn_init",
 
     param_names=[
         "cam_height",
@@ -192,7 +192,7 @@ coincidence_disparity_inh_syn_init = genn_model.create_custom_sparse_connect_ini
 
 #  D-  =   {  d in D  |  (x_d - d_d == 2 * x_L)  or  (x_d + d_d == 2 * x_R)  }
 disparity_disparity_inh_syn_init = genn_model.create_custom_sparse_connect_init_snippet_class(
-    "disparity_disparity_inh_syn",
+    "disparity_disparity_inh_syn_init",
 
     param_names=[
         "cam_height",
@@ -206,28 +206,38 @@ disparity_disparity_inh_syn_init = genn_model.create_custom_sparse_connect_init_
     ],
 
     row_build_code="""
-    int pre_x = pre_x_R + pre_x_L;
-    int pre_d = pre_x_R - pre_x_L;
     int post_y = $(pre_y);
     int id_post_y = post_y * (int) $(cam_width) * (int) $(cam_width);
-    for (int post_x_L = 0; post_x_L < (int) $(cam_width); post_x_L++) {
-        for (int post_x_R = 0; post_x_R < (int) $(cam_width); post_x_R++) {
-            if ((pre_x - pre_d == 2 * post_x_L) || (pre_x + pre_d == 2 * post_x_R)) {
-                int id_post_x_L = post_x_L * (int) $(cam_width);
-                int id_post_x_R = post_x_R;
-                int id_post = id_post_y + id_post_x_L + id_post_x_R;
-                $(addSynapse, id_post);
-            }
-        }
+
+    int post_x_L = $(pre_x_L);
+    int id_post_x_L = post_x_L * (int) $(cam_width);
+    for (int post_x_R = 0; post_x_R < $(cam_width); post_x_R++) {
+        if (post_x_R == $(pre_x_R)) continue;
+        int id_post_x_R = post_x_R;
+        int id_post = id_post_y + id_post_x_L + id_post_x_R;
+        $(addSynapse, id_post);
     }
+
+    int post_x_R = $(pre_x_R);
+    int id_post_x_R = post_x_R * (int) $(cam_width);
+    for (int post_x_L = 0; post_x_L < $(cam_width); post_x_L++) {
+        if (post_x_L == $(pre_x_L)) continue;
+        int id_post_x_L = post_x_L;
+        int id_post = id_post_y + id_post_x_L + id_post_x_R;
+        $(addSynapse, id_post);
+    }
+
     $(endRow);
     """,
 
-    # calc_max_row_len_func=genn_model.create_cmlf_class(
-    #     lambda num_pre, num_post, pars: int(pars[1]))(),
+    calc_max_row_len_func=genn_model.create_cmlf_class(
+        lambda num_pre, num_post, pars: (int(pars[1]) * 2) - 2)(),
 )
 
+disparity_disparity_inh_weight_update = genn_model.create_custom_weight_update_class(
+    "disparity_disparity_inh_weight_update",
 
-# TODO: TEST RECURRENT INH SYNAPSES
-
-# THINK: WHAT IS MAX ROW LENGTH IN LINE OF SIGHT?
+    sim_code='''
+    $(addToInSyn, $(V_post));
+    ''',
+)

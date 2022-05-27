@@ -2,77 +2,80 @@ import numpy as np
 import cv2
 import pygenn
 
-from aedat import aedat_read_frames, aedat_view_frames
+from aedat_read import aedat_read, view_aedat_frames
 from models import *
 
 
 def main():
 
-    dt = 1.0
-
-    cam_height_original = 260
-    cam_width_original = 346
+    #dt = 1.0
+    dt = 10.0
 
     cam_height = 260
     cam_width = 346
-    #cam_height = 520
-    #cam_width = 692
 
-    # f = aedat_read_frames(
-    #     #"./stereo_tests-2022_05_19_16_14_51.aedat4",
-    #     #"./stereo_tests-2022_05_19_16_15_00.aedat4",
-    #     #"./stereo_tests-2022_05_19_16_15_10.aedat4",
-    #     "./stereo_tests-2022_05_19_16_20_35.aedat4",
-    #     #"./stereo_tests-2022_05_24_14_11_01.aedat4",
-    #     #"./stereo_tests-2022_05_27_11_22_12.aedat4",
-    #     "./camera_rectify/20220519",
-    #     cam_height=cam_height_original, cam_width=cam_width_original,
-    #     resize_height=cam_height, resize_width=cam_width,
-    #     skip_usec=1600000,
-    #     #interval_usec=dt*1000)
-    #     #interval_usec=15000)
-    #     interval_usec=0)
-    #     #interval_usec=5000)
+    #conn_matrix = "SPARSE_GLOBALG"
+    conn_matrix = "PROCEDURAL_GLOBALG"
 
-    # Walking back and forward
-    f = aedat_read_frames(
-        "./stereo_tests-2022_05_27_11_22_12.aedat4",
+    f = aedat_read(
+        #"stereo_tests-2022_05_19_16_14_51.aedat4",
+        #"stereo_tests-2022_05_19_16_15_00.aedat4",
+        #"stereo_tests-2022_05_19_16_15_10.aedat4",
+        #"stereo_tests-2022_05_19_16_20_35.aedat4",
+        "stereo_tests-2022_05_24_14_11_01.aedat4",
         "./camera_rectify/20220519",
-        cam_height=cam_height_original, cam_width=cam_width_original,
-        resize_height=cam_height, resize_width=cam_width,
-        skip_usec=1600000,
-        interval_usec=5000)
+        interval_usec=dt*1000)
 
     # # DEBUG: view aedat frames
-    # aedat_view_frames(f, cam_height, cam_width)
+    # view_aedat_frames(f)
     # exit(0)
 
 
-    # Receptive field distance
-    #receptive_distance = 6
-    #receptive_distance = 10
-    receptive_distance = 25
+
+
+
+    # TODO: what should params be?
+
+    # TODO: coincidence detector weight threshold ratio
+    # The ratio thres / w for coincidence detectors is chosen so that while
+    # two retinal spikes can trigger a response, a single spike will not.
+    # so maybe thres=1.5 and w=1.0
+    # time constant selection notes follow, after eqn. 5 in supplementary notes
+
+    # AMPA SYNAPSE W SHOULD BE LOW, NMDA SYNAPSE W SHOULD BE HIGH
+
+    # Disparity Detectors: broad tuning to horizontal cyclopean position and fine tuning to disparity
+
+
+
 
     # Coincidence Detectors
-    coincidence_V_thres = 1.0
-    coincidence_tau = 1.4
-    retina_coincidence_W = 0.65 # tune such that 1 < (V_thres / W) <= 2
-    assert 1 < (coincidence_V_thres / retina_coincidence_W) <= 2
-
-    coincidence_sensitivity = coincidence_tau * np.log(
-        1 / ((coincidence_V_thres / retina_coincidence_W) - 1))
+    coincidence_V_thres = 1.5
+    coincidence_tau = 2.0
+    retina_coincidence_W = 1.0
+    assert 1 < (coincidence_V_thres / retina_coincidence_W) <= 2 # Tune such that 1 < (V_thres / W) <= 2
+    coincidence_sensitivity = coincidence_tau * np.log(1 / ((coincidence_V_thres / retina_coincidence_W) - 1))
     print("coincidence sensitivity:", coincidence_sensitivity)
 
     # Disparity Detectors
-    disparity_V_thres = 1.0
-    disparity_tau = 14.0 # significantly larger than coincidence_tau
-    coincidence_disparity_exc_W = 100.0 / (((receptive_distance * 2.0) + 1.0) ** 2.0)
+    disparity_V_thres = 1.5
+    disparity_tau = 5.0
+    coincidence_disparity_exc_W = 1.0
     coincidence_disparity_inh_W = -coincidence_disparity_exc_W
+    disparity_disparity_inh_W = -disparity_V_thres
+
+    # Receptive field distance
+    #window = 13
+    window = 21
+    assert window % 2 == 1
+    receptive_distance = int((window - 1) / 2)
+
 
 
     # Construct model
     model = pygenn.GeNNModel("float", "stereo_3d")
     model.dT = dt
+
 
     ### NEURONS ###
     ###############
@@ -109,6 +112,7 @@ def main():
     disparity_nrn = model.add_neuron_population(
         "disparity", cam_height * cam_width**2, LIF, disparity_params, disparity_vars)
 
+
     ### SYNAPSES ###
     ################
 
@@ -117,11 +121,11 @@ def main():
         retina_L_coincidence_syn_init,
         {"cam_height": cam_height, "cam_width": cam_width})
     retina_pos_L_coincidence_pos_syn = model.add_synapse_population(
-        "retina_pos_L_coincidence_pos", "PROCEDURAL_GLOBALG", 0, retina_pos_L_nrn, coincidence_pos_nrn,
+        "retina_pos_L_coincidence_pos", conn_matrix, 0, retina_pos_L_nrn, coincidence_pos_nrn,
         "StaticPulse", {}, {"g": retina_coincidence_W}, {}, {},
         "DeltaCurr", {}, {}, conn_init)
     retina_neg_L_coincidence_neg_syn = model.add_synapse_population(
-        "retina_neg_L_coincidence_neg", "PROCEDURAL_GLOBALG", 0, retina_neg_L_nrn, coincidence_neg_nrn,
+        "retina_neg_L_coincidence_neg", conn_matrix, 0, retina_neg_L_nrn, coincidence_neg_nrn,
         "StaticPulse", {}, {"g": retina_coincidence_W}, {}, {},
         "DeltaCurr", {}, {}, conn_init)
 
@@ -130,11 +134,11 @@ def main():
         retina_R_coincidence_syn_init,
         {"cam_height": cam_height, "cam_width": cam_width})
     retina_pos_R_coincidence_pos_syn = model.add_synapse_population(
-        "retina_pos_R_coincidence_pos", "PROCEDURAL_GLOBALG", 0, retina_pos_R_nrn, coincidence_pos_nrn,
+        "retina_pos_R_coincidence_pos", conn_matrix, 0, retina_pos_R_nrn, coincidence_pos_nrn,
         "StaticPulse", {}, {"g": retina_coincidence_W}, {}, {},
         "DeltaCurr", {}, {}, conn_init)
     retina_neg_R_coincidence_neg_syn = model.add_synapse_population(
-        "retina_neg_R_coincidence_neg", "PROCEDURAL_GLOBALG", 0, retina_neg_R_nrn, coincidence_neg_nrn,
+        "retina_neg_R_coincidence_neg", conn_matrix, 0, retina_neg_R_nrn, coincidence_neg_nrn,
         "StaticPulse", {}, {"g": retina_coincidence_W}, {}, {},
         "DeltaCurr", {}, {}, conn_init)
 
@@ -143,11 +147,11 @@ def main():
         coincidence_disparity_exc_syn_init,
         {"cam_height": cam_height, "cam_width": cam_width, "receptive_distance": receptive_distance})
     coincidence_pos_disparity_exc_syn = model.add_synapse_population(
-        "coincidence_pos_disparity_exc", "PROCEDURAL_GLOBALG", 0, coincidence_pos_nrn, disparity_nrn,
+        "coincidence_pos_disparity_exc", conn_matrix, 0, coincidence_pos_nrn, disparity_nrn,
         "StaticPulse", {}, {"g": coincidence_disparity_exc_W}, {}, {},
         "DeltaCurr", {}, {}, conn_init)
     coincidence_neg_disparity_exc_syn = model.add_synapse_population(
-        "coincidence_neg_disparity_exc", "PROCEDURAL_GLOBALG", 0, coincidence_neg_nrn, disparity_nrn,
+        "coincidence_neg_disparity_exc", conn_matrix, 0, coincidence_neg_nrn, disparity_nrn,
         "StaticPulse", {}, {"g": coincidence_disparity_exc_W}, {}, {},
         "DeltaCurr", {}, {}, conn_init)
 
@@ -156,26 +160,32 @@ def main():
         coincidence_disparity_inh_syn_init,
         {"cam_height": cam_height, "cam_width": cam_width, "receptive_distance": receptive_distance})
     coincidence_pos_disparity_inh_syn = model.add_synapse_population(
-        "coincidence_pos_disparity_inh", "PROCEDURAL_GLOBALG", 0, coincidence_pos_nrn, disparity_nrn,
+        "coincidence_pos_disparity_inh", conn_matrix, 0, coincidence_pos_nrn, disparity_nrn,
         "StaticPulse", {}, {"g": coincidence_disparity_inh_W}, {}, {},
         "DeltaCurr", {}, {}, conn_init)
     coincidence_neg_disparity_inh_syn = model.add_synapse_population(
-        "coincidence_neg_disparity_inh", "PROCEDURAL_GLOBALG", 0, coincidence_neg_nrn, disparity_nrn,
+        "coincidence_neg_disparity_inh", conn_matrix, 0, coincidence_neg_nrn, disparity_nrn,
         "StaticPulse", {}, {"g": coincidence_disparity_inh_W}, {}, {},
         "DeltaCurr", {}, {}, conn_init)
 
-    # Inhibitory Recurrent Disparity -> Disparity
-    conn_init = pygenn.genn_model.init_connectivity(
-        disparity_disparity_inh_syn_init,
-        {"cam_height": cam_height, "cam_width": cam_width})
-    disparity_disparity_inh_syn = model.add_synapse_population(
-        "disparity_disparity_inh", "PROCEDURAL_GLOBALG", 0, disparity_nrn, disparity_nrn,
-        disparity_disparity_inh_weight_update, {}, {}, {}, {},
-        "DeltaCurr", {}, {}, conn_init)
+    # # Inhibitory Recurrent Disparity -> Disparity
+    # conn_init = pygenn.genn_model.init_connectivity(
+    #     disparity_disparity_inh_syn_init,
+    #     {"cam_height": cam_height, "cam_width": cam_width})
+    # disparity_disparity_inh_syn = model.add_synapse_population(
+    #     "disparity_disparity_inh", conn_matrix, 0, disparity_nrn, disparity_nrn,
+    #     "StaticPulse", {}, {"g": disparity_disparity_inh_W}, {}, {},
+    #     "DeltaCurr", {}, {}, conn_init)
+
+
 
     # Build and load GeNN model
     model.build()
     model.load()
+
+
+
+
 
 
     # Set retinae inputs
@@ -188,6 +198,8 @@ def main():
         retina_pos_R_nrn.push_var_to_device("input")
         retina_neg_R_nrn.vars["input"].view.reshape(cam_height, cam_width)[:] = neg_R
         retina_neg_R_nrn.push_var_to_device("input")
+
+
 
     # Coordinate mapping
     def coordinates_to_disparity_space(x_L, x_R, y):
@@ -213,10 +225,14 @@ def main():
         return coordinates
 
 
-    # Output frames
+
+
+
     output = np.empty((cam_height, cam_width * 2, 3), dtype="float32")
     output_L = output[:cam_height, :cam_width]
     output_R = output[:cam_height, cam_width:]
+
+
 
     # Simulate model
     for pos_L, neg_L, pos_R, neg_R in f:
@@ -227,50 +243,45 @@ def main():
 
         # Get spikes
         coincidence_pos_nrn.pull_current_spikes_from_device()
-        coincidence_neg_nrn.pull_current_spikes_from_device()
-        disparity_nrn.pull_current_spikes_from_device()
         coincidence_pos_spikes = coincidence_pos_nrn.current_spikes
+        coincidence_neg_nrn.pull_current_spikes_from_device()
         coincidence_neg_spikes = coincidence_neg_nrn.current_spikes
+        disparity_nrn.pull_current_spikes_from_device()
         disparity_spikes = disparity_nrn.current_spikes
 
         # Filter spikes (handles broadly tuned cyclopean distance)
         pos_spikes = np.intersect1d(coincidence_pos_spikes, disparity_spikes)
         neg_spikes = np.intersect1d(coincidence_neg_spikes, disparity_spikes)
+        #pos_spikes = disparity_spikes
+        #neg_spikes = disparity_spikes
 
-        # Tune plot range
-        event_offset = 10
-        event_range = 10
 
-        # Plot colour mapping
-        cmap_B = np.linspace(0.0, 1.0, event_range, dtype="float32")
-        cmap_G = np.zeros(event_range, dtype="float32")
-        cmap_R = np.linspace(1.0, 0.0, event_range, dtype="float32")
-        cmap = np.vstack([cmap_B, cmap_G, cmap_R]).T
 
-        output_L.fill(0.0)
-        output_R.fill(0.0)
+
+
+
+        output_L.fill(0)
+        output_R.fill(0)
 
         for spike_i in pos_spikes:
-            c = index_to_coordinates(spike_i)
-            d = np.abs(c["x_R"] - c["x_L"])
-            event_distance = event_offset + (event_range - d)
-            if event_distance < 0:
-                event_distance = 0
-            elif event_distance >= event_range:
-                event_distance = event_range - 1
-            output_L[c["y"], c["x_L"]] = cmap[event_distance]
-            output_R[c["y"], c["x_R"]] = cmap[event_distance]
+            coordinates = index_to_coordinates(spike_i)
+            y = coordinates["y"]
+            x_L = coordinates["x_L"]
+            x_R = coordinates["x_R"]
+            #assert output_L[y, x_L, 1] == 0
+            #assert output_R[y, x_R, 1] == 0
+            output_L[y, x_L, 1] = (x_R - x_L) / cam_width
+            output_R[y, x_R, 1] = (x_R - x_L) / cam_width
 
         for spike_i in neg_spikes:
-            c = index_to_coordinates(spike_i)
-            d = np.abs(c["x_R"] - c["x_L"])
-            event_distance = event_offset + (event_range - d)
-            if event_distance < 0:
-                event_distance = 0
-            elif event_distance >= event_range:
-                event_distance = event_range - 1
-            output_L[c["y"], c["x_L"]] = cmap[event_distance]
-            output_R[c["y"], c["x_R"]] = cmap[event_distance]
+            coordinates = index_to_coordinates(spike_i)
+            y = coordinates["y"]
+            x_L = coordinates["x_L"]
+            x_R = coordinates["x_R"]
+            #assert output_L[y, x_L, 2] == 0
+            #assert output_R[y, x_R, 2] == 0
+            output_L[y, x_L, 2] = (x_R - x_L) / cam_width
+            output_R[y, x_R, 2] = (x_R - x_L) / cam_width
 
         cv2.imshow("output", output)
         k = cv2.waitKey(0)
@@ -286,7 +297,7 @@ def main():
 
 
 
-    # ############################ TESTING ############################
+    ############################ TESTING ############################
 
     # spikes = []
     # for i in range(2):
