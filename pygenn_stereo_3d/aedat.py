@@ -22,7 +22,7 @@ def aedat_view_frames(
 def aedat_read_frames(
         data_path, calib_path,
         cam_height=260, cam_width=346,
-        resize_height=260, resize_width=346,
+        cam_resize_height=260, cam_resize_width=346,
         resize_interpolation=cv2.INTER_NEAREST,
         skip_usec=0, interval_usec=5000):
     K_L = np.load(calib_path + '/K0.npy')
@@ -62,8 +62,12 @@ def aedat_read_frames(
                     else:
                         neg_L[xy_int[1], xy_int[0]] += 1
                 i_L += 1
-            pos_L = cv2.resize(pos_L, dsize=(resize_width, resize_height), interpolation=resize_interpolation)
-            neg_L = cv2.resize(neg_L, dsize=(resize_width, resize_height), interpolation=resize_interpolation)
+            pos_L = cv2.resize(
+                pos_L, dsize=(cam_resize_width, cam_resize_height),
+                interpolation=resize_interpolation)
+            neg_L = cv2.resize(
+                neg_L, dsize=(cam_resize_width, cam_resize_height),
+                interpolation=resize_interpolation)
 
             pos_R = np.zeros((cam_height, cam_width), dtype='uint8')
             neg_R = np.zeros((cam_height, cam_width), dtype='uint8')
@@ -78,7 +82,11 @@ def aedat_read_frames(
                     else:
                         neg_R[xy_int[1], xy_int[0]] += 1
                 i_R += 1
-            pos_R = cv2.resize(pos_R, dsize=(resize_width, resize_height), interpolation=resize_interpolation)
-            neg_R = cv2.resize(neg_R, dsize=(resize_width, resize_height), interpolation=resize_interpolation)
+            pos_R = cv2.resize(
+                pos_R, dsize=(cam_resize_width, cam_resize_height),
+                interpolation=resize_interpolation)
+            neg_R = cv2.resize(
+                neg_R, dsize=(cam_resize_width, cam_resize_height),
+                interpolation=resize_interpolation)
 
             yield pos_L, neg_L, pos_R, neg_R
