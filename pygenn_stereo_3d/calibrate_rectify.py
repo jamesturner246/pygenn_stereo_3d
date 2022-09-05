@@ -8,7 +8,7 @@ import time
 
 def calibrate_camera(dv_address, dv_port, cb_shape=(6, 9), cb_square_size=0.024):
 
-    # prepare object points, like (0, 0, 0), (1, 0, 0), (2, 0, 0) ...., (6, 5, 0)
+    # prepare object points, like (0, 0, 0), (1, 0, 0), (2, 0, 0) ...., (5, 8, 0)
     objp = np.zeros((cb_shape[0] * cb_shape[1], 3), np.float32)
     objp[:, :2] = np.mgrid[0:cb_shape[0], 0:cb_shape[1]].T.reshape(-1, 2)
     objp *= cb_square_size
@@ -25,8 +25,11 @@ def calibrate_camera(dv_address, dv_port, cb_shape=(6, 9), cb_square_size=0.024)
             image_colour = frame.image.copy()
             image_grey = cv2.cvtColor(image_colour, cv2.COLOR_BGR2GRAY)
 
+            flags = 0
+            flags |= cv2.CALIB_CB_ADAPTIVE_THRESH
+            flags |= cv2.CALIB_CB_FILTER_QUADS
             ret, corners = cv2.findChessboardCorners(
-                image_grey, cb_shape, cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_FILTER_QUADS)
+                image_grey, cb_shape, flags=flags)
 
             if ret:
                 # If found, refine corners
@@ -55,10 +58,9 @@ def calibrate_camera(dv_address, dv_port, cb_shape=(6, 9), cb_square_size=0.024)
     image_size = image_grey.shape[::-1]
 
     ret, K, D, R, T = cv2.calibrateCamera(objpoints, imgpoints, image_size, None, None)
+    print('cv2.calibrateCamera ret:', ret)
 
-    print('ret:', ret)
-
-    return ret, K, D, R, T
+    return K, D, R, T
 
 
 def test_calibrate(dv_address, dv_port, K, D):
@@ -127,10 +129,13 @@ def rectify_cameras(dv_address, dv_port0, dv_port1, K0, K1, D0, D1, cb_shape=(6,
             image1_colour = frame1.image.copy()
             image1_grey = cv2.cvtColor(image1_colour, cv2.COLOR_BGR2GRAY)
 
+            flags = 0
+            flags |= cv2.CALIB_CB_ADAPTIVE_THRESH
+            flags |= cv2.CALIB_CB_FILTER_QUADS
             ret0, corners0 = cv2.findChessboardCorners(
-                image0_grey, cb_shape, cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_FILTER_QUADS)
+                image0_grey, cb_shape, flags=flags)
             ret1, corners1 = cv2.findChessboardCorners(
-                image1_grey, cb_shape, cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_FILTER_QUADS)
+                image1_grey, cb_shape, flags=flags)
 
             if ret0 and ret1:
 
@@ -164,23 +169,23 @@ def rectify_cameras(dv_address, dv_port0, dv_port1, K0, K1, D0, D1, cb_shape=(6,
     # Calibrate and rectify
     image_size = image0_grey.shape[::-1]
 
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-
     flags = 0
+    #flags |= cv2.CALIB_FIX_INTRINSIC
     flags |= cv2.CALIB_USE_INTRINSIC_GUESS
     flags |= cv2.CALIB_FIX_ASPECT_RATIO
-
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
     ret, K0, D0, K1, D1, R, T, E, F = cv2.stereoCalibrate(
-        #objpoints, imgpoints0, imgpoints1, K0, D0, K1, D1, image_size)
-        objpoints, imgpoints0, imgpoints1, K0, D0, K1, D1, image_size, criteria, flags)
+        objpoints, imgpoints0, imgpoints1, K0, D0, K1, D1, image_size, flags=flags, criteria=criteria)
+    print('cv2.stereoCalibrate ret:', ret)
 
+    flags = 0
+    flags |= cv2.CALIB_ZERO_DISPARITY
+    #alpha = 0.9
+    alpha = 0.3
     R0, R1, P0, P1, Q, roi_left, roi_right = cv2.stereoRectify(
-        #K0, D0, K1, D1, image_size, R, T, flags=cv2.CALIB_ZERO_DISPARITY, alpha=0.9)
-        K0, D0, K1, D1, image_size, R, T, flags=cv2.CALIB_ZERO_DISPARITY, alpha=0.3)
+        K0, D0, K1, D1, image_size, R, T, flags=flags, alpha=alpha)
 
-    print('ret:', ret)
-
-    return ret, R, T, E, F, K0, K1, D0, D1, R0, R1, P0, P1, Q
+    return R, T, E, F, K0, K1, D0, D1, R0, R1, P0, P1, Q
 
 
 def test_rectify(dv_address, dv_port0, dv_port1, K0, K1, D0, D1, R0, R1, P0, P1):
@@ -233,12 +238,10 @@ if __name__ == '__main__':
     # Calibrate file names
     date = time.strftime('%Y%m%d')
     path = f'./camera_calibration/{date}'
-    ret0_file_name = f'{path}/ret0.npy'
     K0_file_name = f'{path}/K0.npy'
     D0_file_name = f'{path}/D0.npy'
     R0_file_name = f'{path}/R0.npy'
     T0_file_name = f'{path}/T0.npy'
-    ret1_file_name = f'{path}/ret1.npy'
     K1_file_name = f'{path}/K1.npy'
     D1_file_name = f'{path}/D1.npy'
     R1_file_name = f'{path}/R1.npy'
@@ -246,30 +249,26 @@ if __name__ == '__main__':
 
     # # Calibrate cameras
     # print('calibrating camera 0')
-    # ret0, K0, D0, R0, T0 = calibrate_camera(dv_address, dv_port0)
+    # K0, D0, R0, T0 = calibrate_camera(dv_address, dv_port0)
     # print('calibrating camera 1')
-    # ret1, K1, D1, R1, T1 = calibrate_camera(dv_address, dv_port1)
+    # K1, D1, R1, T1 = calibrate_camera(dv_address, dv_port1)
 
     # # Save camera calibrations
     # os.makedirs(path, exist_ok=True)
-    # np.save(ret0_file_name, ret0)
     # np.save(K0_file_name, K0)
     # np.save(D0_file_name, D0)
     # np.save(R0_file_name, R0)
     # np.save(T0_file_name, T0)
-    # np.save(ret1_file_name, ret1)
     # np.save(K1_file_name, K1)
     # np.save(D1_file_name, D1)
     # np.save(R1_file_name, R1)
     # np.save(T1_file_name, T1)
 
     # Load camera calibrations
-    ret0 = np.load(ret0_file_name)
     K0 = np.load(K0_file_name)
     D0 = np.load(D0_file_name)
     R0 = np.load(R0_file_name)
     T0 = np.load(T0_file_name)
-    ret1 = np.load(ret1_file_name)
     K1 = np.load(K1_file_name)
     D1 = np.load(D1_file_name)
     R1 = np.load(R1_file_name)
@@ -284,7 +283,6 @@ if __name__ == '__main__':
     # rectify file names
     date = time.strftime('%Y%m%d')
     path = f'./camera_rectify/{date}'
-    ret_file_name = f'{path}/ret.npy'
     R_file_name = f'{path}/R.npy'
     T_file_name = f'{path}/T.npy'
     E_file_name = f'{path}/E.npy'
@@ -300,12 +298,11 @@ if __name__ == '__main__':
     Q_file_name = f'{path}/Q.npy'
 
     # Calibrate and rectify stereo cameras
-    ret, R, T, E, F, K0, K1, D0, D1, R0, R1, P0, P1, Q = rectify_cameras(
+    R, T, E, F, K0, K1, D0, D1, R0, R1, P0, P1, Q = rectify_cameras(
         dv_address, dv_port0, dv_port1, K0, K1, D0, D1)
 
     # Save camera calibrations
     os.makedirs(path, exist_ok=True)
-    np.save(ret_file_name, ret)
     np.save(R_file_name, R)
     np.save(T_file_name, T)
     np.save(E_file_name, E)
@@ -322,7 +319,6 @@ if __name__ == '__main__':
 
     # Load camera calibrations
     os.makedirs(path, exist_ok=True)
-    ret = np.load(ret_file_name)
     R = np.load(R_file_name)
     T = np.load(T_file_name)
     E = np.load(E_file_name)

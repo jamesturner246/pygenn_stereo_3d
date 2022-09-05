@@ -237,7 +237,7 @@ disparity_disparity_inh_syn_init = genn_model.create_custom_sparse_connect_init_
 disparity_disparity_inh_weight_update = genn_model.create_custom_weight_update_class(
     "disparity_disparity_inh_weight_update",
 
-    sim_code='''
+    sim_code="""
     $(addToInSyn, $(V_post));
-    ''',
+    """,
 )

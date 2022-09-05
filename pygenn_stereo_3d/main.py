@@ -14,11 +14,12 @@ def main(aedat_file_path,
          cam_resize_width=346,
          skip_usec=1600000,
          interval_usec=5000,
+         record_video=False,
          model_name="pygenn_stereo_3d",
          model_fp_type="float",
          model_dt=1.0):
 
-    # Walking back and forward
+    # aedat frame generator
     f = aedat_read_frames(
         aedat_file_path, calibration_path,
         cam_height=cam_height, cam_width=cam_width,
@@ -197,6 +198,12 @@ def main(aedat_file_path,
     output_L = output[:cam_resize_height, :cam_resize_width]
     output_R = output[:cam_resize_height, cam_resize_width:]
 
+    if record_video:
+        video_file_name = "stereo_3d_video.avi"
+        video_file = cv2.VideoWriter(
+            video_file_name, cv2.VideoWriter_fourcc(*"MJPG"),
+            1000000 / interval_usec, (cam_resize_width * 2, cam_resize_height))
+
     # Simulate model
     for pos_L, neg_L, pos_R, neg_R in f:
 
@@ -226,8 +233,8 @@ def main(aedat_file_path,
         cmap_R = np.linspace(1.0, 0.0, event_range, dtype="float32")
         cmap = np.vstack([cmap_B, cmap_G, cmap_R]).T
 
-        output_L.fill(0.0)
-        output_R.fill(0.0)
+        output_L.fill(1.0)
+        output_R.fill(1.0)
 
         for spike_i in pos_spikes:
             c = index_to_coordinates(spike_i)
@@ -251,11 +258,18 @@ def main(aedat_file_path,
             output_L[c["y"], c["x_L"]] = cmap[event_distance]
             output_R[c["y"], c["x_R"]] = cmap[event_distance]
 
+        if record_video:
+            video_frame = (output * 255).astype("uint8")
+            video_file.write(video_frame)
+
         cv2.imshow("output", output)
-        k = cv2.waitKey(0)
+        k = cv2.waitKey(1)
         if k == ord("q"):
             cv2.destroyWindow("output")
             exit(0)
+
+    if record_video:
+        video_file.release()
 
 
 if __name__  == "__main__":
@@ -273,6 +287,7 @@ if __name__  == "__main__":
     parser.add_argument("--cam-resize-width", type=int, default=346)
     parser.add_argument("--skip-usec", type=int, default=1600000)
     parser.add_argument("--interval-usec", type=int, default=5000)
+    parser.add_argument("--record-video", type=bool, default=False)
 
     # GeNN model parameters
     parser.add_argument("--model-name", type=str, default="pygenn_stereo_3d")
