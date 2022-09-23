@@ -9,7 +9,9 @@ from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 spike_input = genn_model.create_custom_neuron_class(
     "spike_input",
 
-    var_name_types=[("input", "scalar", VarAccess_READ_ONLY_DUPLICATE)],
+    var_name_types=[
+        ("input", "scalar", VarAccess_READ_ONLY_DUPLICATE),
+    ],
 
     sim_code="""
     const bool spike = $(input) != 0.0;
@@ -238,6 +240,6 @@ disparity_disparity_inh_weight_update = genn_model.create_custom_weight_update_c
     "disparity_disparity_inh_weight_update",
 
     sim_code="""
-    $(addToInSyn, $(V_post));
+    $(addToInSyn, -$(V_post));
     """,
 )
