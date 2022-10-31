@@ -69,6 +69,8 @@ def test_calibrate(dv_address, dv_port, K, D):
         frame = next(f)
         image_distorted = frame.image.copy()
 
+    image_undistorted = cv2.undistort(image_distorted, K, D)
+
     point_distorted = []
     for j in range(33):
         for k in range(24):
@@ -77,11 +79,9 @@ def test_calibrate(dv_address, dv_port, K, D):
             image_distorted[point[1], point[0], :] = np.array([0, 0, 0])
     point_distorted = np.vstack(point_distorted)
 
-    image_undistorted = cv2.undistort(image_distorted, K, D, None, K)
-
     point_undistorted = []
     for xy in point_distorted:
-        xy_undistorted = cv2.undistortPoints(xy, K, D, None, K)[0]
+        xy_undistorted = cv2.undistortPoints(xy, K, D, P=K)[0]
         point_undistorted.append(xy_undistorted)
     point_undistorted = np.vstack(point_undistorted)
 
@@ -170,9 +170,8 @@ def rectify_cameras(dv_address, dv_port0, dv_port1, K0, K1, D0, D1, cb_shape=(6,
     image_size = image0_grey.shape[::-1]
 
     flags = 0
-    #flags |= cv2.CALIB_FIX_INTRINSIC
-    flags |= cv2.CALIB_USE_INTRINSIC_GUESS
-    flags |= cv2.CALIB_FIX_ASPECT_RATIO
+    flags |= cv2.CALIB_FIX_INTRINSIC
+    #flags |= cv2.CALIB_USE_INTRINSIC_GUESS
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
     ret, K0, D0, K1, D1, R, T, E, F = cv2.stereoCalibrate(
         objpoints, imgpoints0, imgpoints1, K0, D0, K1, D1, image_size, flags=flags, criteria=criteria)
@@ -230,13 +229,14 @@ def test_rectify(dv_address, dv_port0, dv_port1, K0, K1, D0, D1, R0, R1, P0, P1)
 
 if __name__ == '__main__':
 
+    date = time.strftime('%Y%m%d')
+
     # DVS camera servers
     dv_address = '127.0.0.1'
     dv_port0 = 36002
     dv_port1 = 36003
 
     # Calibrate file names
-    date = time.strftime('%Y%m%d')
     path = f'./camera_calibration/{date}'
     K0_file_name = f'{path}/K0.npy'
     D0_file_name = f'{path}/D0.npy'
@@ -281,7 +281,6 @@ if __name__ == '__main__':
     # test_calibrate(dv_address, dv_port1, K1, D1)
 
     # rectify file names
-    date = time.strftime('%Y%m%d')
     path = f'./camera_rectify/{date}'
     R_file_name = f'{path}/R.npy'
     T_file_name = f'{path}/T.npy'
