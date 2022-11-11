@@ -61,19 +61,19 @@ retina_L_coincidence_syn_init = genn_model.create_custom_sparse_connect_init_sni
     "retina_L_coincidence_syn_init",
 
     param_names=[
-        "cam_height",
-        "cam_width",
+        "height",
+        "width",
     ],
 
     row_build_state_vars=[
-        ("pre_y", "int", "(int) $(id_pre) / (int) $(cam_width)"),
-        ("pre_x_L", "int", "(int) $(id_pre) % (int) $(cam_width)"),
+        ("pre_y", "int", "(int) $(id_pre) / (int) $(width)"),
+        ("pre_x_L", "int", "(int) $(id_pre) % (int) $(width)"),
     ],
 
     row_build_code="""
-    int id_post_y = $(pre_y) * (int) $(cam_width) * (int) $(cam_width);
-    int id_post_x_L = $(pre_x_L) * (int) $(cam_width);
-    for (int id_post_x_R = 0; id_post_x_R < (int) $(cam_width); id_post_x_R++) {
+    int id_post_y = $(pre_y) * (int) $(width) * (int) $(width);
+    int id_post_x_L = $(pre_x_L) * (int) $(width);
+    for (int id_post_x_R = 0; id_post_x_R < (int) $(width); id_post_x_R++) {
         int id_post = id_post_y + id_post_x_L + id_post_x_R;
         $(addSynapse, id_post);
     }
@@ -88,20 +88,20 @@ retina_R_coincidence_syn_init = genn_model.create_custom_sparse_connect_init_sni
     "retina_R_coincidence_syn_init",
 
     param_names=[
-        "cam_height",
-        "cam_width",
+        "height",
+        "width",
     ],
 
     row_build_state_vars=[
-        ("pre_y", "int", "(int) $(id_pre) / (int) $(cam_width)"),
-        ("pre_x_R", "int", "(int) $(id_pre) % (int) $(cam_width)"),
+        ("pre_y", "int", "(int) $(id_pre) / (int) $(width)"),
+        ("pre_x_R", "int", "(int) $(id_pre) % (int) $(width)"),
     ],
 
     row_build_code="""
-    int id_post_y = $(pre_y) * (int) $(cam_width) * (int) $(cam_width);
+    int id_post_y = $(pre_y) * (int) $(width) * (int) $(width);
     int id_post_x_R = $(pre_x_R);
-    for (int post_x_L = 0; post_x_L < (int) $(cam_width); post_x_L++) {
-        int id_post_x_L = post_x_L * (int) $(cam_width);
+    for (int post_x_L = 0; post_x_L < (int) $(width); post_x_L++) {
+        int id_post_x_L = post_x_L * (int) $(width);
         int id_post = id_post_y + id_post_x_L + id_post_x_R;
         $(addSynapse, id_post);
     }
@@ -117,27 +117,27 @@ coincidence_disparity_exc_syn_init = genn_model.create_custom_sparse_connect_ini
     "coincidence_disparity_exc_syn_init",
 
     param_names=[
-        "cam_height",
-        "cam_width",
+        "height",
+        "width",
         "receptive_distance",
     ],
 
     row_build_state_vars=[
-        ("pre_y", "int", "((int) $(id_pre) / (int) $(cam_width)) / (int) $(cam_width)"),
-        ("pre_x_L", "int", "((int) $(id_pre) / (int) $(cam_width)) % (int) $(cam_width)"),
-        ("pre_x_R", "int", "(int) $(id_pre) % (int) $(cam_width)"),
+        ("pre_y", "int", "((int) $(id_pre) / (int) $(width)) / (int) $(width)"),
+        ("pre_x_L", "int", "((int) $(id_pre) / (int) $(width)) % (int) $(width)"),
+        ("pre_x_R", "int", "(int) $(id_pre) % (int) $(width)"),
     ],
 
     row_build_code="""
     for (int y_offset = -$(receptive_distance); y_offset <= $(receptive_distance); y_offset++) {
         int post_y = $(pre_y) + y_offset;
-        if ((post_y >= 0) && (post_y < $(cam_height))) {
-            int id_post_y = post_y * (int) $(cam_width) * (int) $(cam_width);
+        if ((post_y >= 0) && (post_y < $(height))) {
+            int id_post_y = post_y * (int) $(width) * (int) $(width);
             for (int x_offset = -$(receptive_distance); x_offset <= $(receptive_distance); x_offset++) {
                 int post_x_L = $(pre_x_L) + x_offset;
                 int post_x_R = $(pre_x_R) + x_offset;
-                if ((post_x_L >= 0) && (post_x_L < $(cam_width)) && (post_x_R >= 0) && (post_x_R < $(cam_width))) {
-                    int id_post_x_L = post_x_L * (int) $(cam_width);
+                if ((post_x_L >= 0) && (post_x_L < $(width)) && (post_x_R >= 0) && (post_x_R < $(width))) {
+                    int id_post_x_L = post_x_L * (int) $(width);
                     int id_post_x_R = post_x_R;
                     int id_post = id_post_y + id_post_x_L + id_post_x_R;
                     $(addSynapse, id_post);
@@ -157,27 +157,33 @@ coincidence_disparity_inh_syn_init = genn_model.create_custom_sparse_connect_ini
     "coincidence_disparity_inh_syn_init",
 
     param_names=[
-        "cam_height",
-        "cam_width",
+        "height",
+        "width",
         "receptive_distance",
     ],
 
     row_build_state_vars=[
-        ("pre_y", "int", "((int) $(id_pre) / (int) $(cam_width)) / (int) $(cam_width)"),
-        ("pre_x_L", "int", "((int) $(id_pre) / (int) $(cam_width)) % (int) $(cam_width)"),
-        ("pre_x_R", "int", "(int) $(id_pre) % (int) $(cam_width)"),
+        ("pre_y", "int", "((int) $(id_pre) / (int) $(width)) / (int) $(width)"),
+        ("pre_x_L", "int", "((int) $(id_pre) / (int) $(width)) % (int) $(width)"),
+        ("pre_x_R", "int", "(int) $(id_pre) % (int) $(width)"),
     ],
 
     row_build_code="""
     for (int y_offset = -$(receptive_distance); y_offset <= $(receptive_distance); y_offset++) {
         int post_y = $(pre_y) + y_offset;
-        if ((post_y >= 0) && (post_y < $(cam_height))) {
-            int id_post_y = post_y * (int) $(cam_width) * (int) $(cam_width);
+        if ((post_y >= 0) && (post_y < $(height))) {
+            int id_post_y = post_y * (int) $(width) * (int) $(width);
             for (int x_offset = -$(receptive_distance); x_offset <= $(receptive_distance); x_offset++) {
+
+
+                // TODO
+                if (x_offset == 0) continue;
+
+
                 int post_x_L = $(pre_x_L) - x_offset;
                 int post_x_R = $(pre_x_R) + x_offset;
-                if ((post_x_L >= 0) && (post_x_L < $(cam_width)) && (post_x_R >= 0) && (post_x_R < $(cam_width))) {
-                    int id_post_x_L = post_x_L * (int) $(cam_width);
+                if ((post_x_L >= 0) && (post_x_L < $(width)) && (post_x_R >= 0) && (post_x_R < $(width))) {
+                    int id_post_x_L = post_x_L * (int) $(width);
                     int id_post_x_R = post_x_R;
                     int id_post = id_post_y + id_post_x_L + id_post_x_R;
                     $(addSynapse, id_post);
@@ -197,23 +203,23 @@ disparity_disparity_inh_syn_init = genn_model.create_custom_sparse_connect_init_
     "disparity_disparity_inh_syn_init",
 
     param_names=[
-        "cam_height",
-        "cam_width",
+        "height",
+        "width",
     ],
 
     row_build_state_vars=[
-        ("pre_y", "int", "((int) $(id_pre) / (int) $(cam_width)) / (int) $(cam_width)"),
-        ("pre_x_L", "int", "((int) $(id_pre) / (int) $(cam_width)) % (int) $(cam_width)"),
-        ("pre_x_R", "int", "(int) $(id_pre) % (int) $(cam_width)"),
+        ("pre_y", "int", "((int) $(id_pre) / (int) $(width)) / (int) $(width)"),
+        ("pre_x_L", "int", "((int) $(id_pre) / (int) $(width)) % (int) $(width)"),
+        ("pre_x_R", "int", "(int) $(id_pre) % (int) $(width)"),
     ],
 
     row_build_code="""
     int post_y = $(pre_y);
-    int id_post_y = post_y * (int) $(cam_width) * (int) $(cam_width);
+    int id_post_y = post_y * (int) $(width) * (int) $(width);
 
     int post_x_L = $(pre_x_L);
-    int id_post_x_L = post_x_L * (int) $(cam_width);
-    for (int post_x_R = 0; post_x_R < $(cam_width); post_x_R++) {
+    int id_post_x_L = post_x_L * (int) $(width);
+    for (int post_x_R = 0; post_x_R < $(width); post_x_R++) {
         if (post_x_R == $(pre_x_R)) continue;
         int id_post_x_R = post_x_R;
         int id_post = id_post_y + id_post_x_L + id_post_x_R;
@@ -221,8 +227,8 @@ disparity_disparity_inh_syn_init = genn_model.create_custom_sparse_connect_init_
     }
 
     int post_x_R = $(pre_x_R);
-    int id_post_x_R = post_x_R * (int) $(cam_width);
-    for (int post_x_L = 0; post_x_L < $(cam_width); post_x_L++) {
+    int id_post_x_R = post_x_R * (int) $(width);
+    for (int post_x_L = 0; post_x_L < $(width); post_x_L++) {
         if (post_x_L == $(pre_x_L)) continue;
         int id_post_x_L = post_x_L;
         int id_post = id_post_y + id_post_x_L + id_post_x_R;
@@ -239,7 +245,11 @@ disparity_disparity_inh_syn_init = genn_model.create_custom_sparse_connect_init_
 disparity_disparity_inh_weight_update = genn_model.create_custom_weight_update_class(
     "disparity_disparity_inh_weight_update",
 
+    # TODO: SIM_CODE SHOULD SIMPLY SET V_POST = 0.0
+    # TODO: INSYN SHOULD REMAIN UNTOUCHED
+    # WAS:  $(addToInSyn, -$(V_post));
+
     sim_code="""
-    $(addToInSyn, -$(V_post));
+    $(V_post) = 0.0;
     """,
 )

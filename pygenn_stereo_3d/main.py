@@ -2,32 +2,46 @@ import numpy as np
 import cv2
 import pygenn
 
-from aedat import aedat_read_frames, aedat_view_frames
+from drds import drds_generator
+from aedat import aedat_generator
+from utils import view_frames
 from models import *
 
 
-def main(aedat_file_path,
-         calibration_path="./calibration",
-         cam_height=260,
-         cam_width=346,
-         cam_resize_height=260,
-         cam_resize_width=346,
+def main(aedat_file_path=None,
+         calibration_path=None,
+         cam_height=260, cam_width=346,
+         height=260, width=346,
          skip_usec=1600000,
          interval_usec=5000,
-         record_video=False,
          model_name="pygenn_stereo_3d",
          model_fp_type="float",
-         model_dt=1.0):
+         model_dt=1.0,
+         record_video=False):
 
-    # aedat frame generator
-    f = aedat_read_frames(
-        aedat_file_path, calibration_path,
-        cam_height=cam_height, cam_width=cam_width,
-        cam_resize_height=cam_resize_height, cam_resize_width=cam_resize_width,
-        skip_usec=skip_usec, interval_usec=interval_usec)
 
-    # # DEBUG: view aedat frames
-    # aedat_view_frames(f, cam_resize_height, cam_resize_width)
+    #disparity_scale = 1.0
+    #disparity_scale = 0.5
+    disparity_scale = 0.25 # WORKS WELL
+    #disparity_scale = 0.1
+
+
+    # DRDS frame generator
+    f = drds_generator(
+        "./MM_gnd.png", disparity_scale=disparity_scale, size=(height, width),
+        total_time_msec=1000, update_frequency=100, p_flip=0.2)
+
+    # # AEDAT frame generator
+    # f = aedat_generator(
+    #     aedat_file_path, calibration_path,
+    #     cam_size=(cam_height, cam_width), size=(height, width),
+    #     skip_usec=skip_usec, interval_usec=interval_usec)
+
+
+
+
+    # # DEBUG: view event frames
+    # view_frames(f, height, width)
     # exit(0)
 
     # Receptive field distance
@@ -61,13 +75,13 @@ def main(aedat_file_path,
     retina_params = {}
     retina_vars = {"input": 0.0}
     retina_pos_L_nrn = model.add_neuron_population(
-        "retina_pos_L", cam_resize_height * cam_resize_width, spike_input, retina_params, retina_vars)
+        "retina_pos_L", height * width, spike_input, retina_params, retina_vars)
     retina_neg_L_nrn = model.add_neuron_population(
-        "retina_neg_L", cam_resize_height * cam_resize_width, spike_input, retina_params, retina_vars)
+        "retina_neg_L", height * width, spike_input, retina_params, retina_vars)
     retina_pos_R_nrn = model.add_neuron_population(
-        "retina_pos_R", cam_resize_height * cam_resize_width, spike_input, retina_params, retina_vars)
+        "retina_pos_R", height * width, spike_input, retina_params, retina_vars)
     retina_neg_R_nrn = model.add_neuron_population(
-        "retina_neg_R", cam_resize_height * cam_resize_width, spike_input, retina_params, retina_vars)
+        "retina_neg_R", height * width, spike_input, retina_params, retina_vars)
 
     # Coincidence detectors
     coincidence_params = {
@@ -76,9 +90,9 @@ def main(aedat_file_path,
     }
     coincidence_vars = {"V": 0.0}
     coincidence_pos_nrn = model.add_neuron_population(
-        "coincidence_pos", cam_resize_height * cam_resize_width**2, LIF, coincidence_params, coincidence_vars)
+        "coincidence_pos", height * width**2, LIF, coincidence_params, coincidence_vars)
     coincidence_neg_nrn = model.add_neuron_population(
-        "coincidence_neg", cam_resize_height * cam_resize_width**2, LIF, coincidence_params, coincidence_vars)
+        "coincidence_neg", height * width**2, LIF, coincidence_params, coincidence_vars)
 
     # Disparity detectors
     disparity_params = {
@@ -87,7 +101,7 @@ def main(aedat_file_path,
     }
     disparity_vars = {"V": 0.0}
     disparity_nrn = model.add_neuron_population(
-        "disparity", cam_resize_height * cam_resize_width**2, LIF, disparity_params, disparity_vars)
+        "disparity", height * width**2, LIF, disparity_params, disparity_vars)
 
     ### SYNAPSES ###
     ################
@@ -95,7 +109,7 @@ def main(aedat_file_path,
     # Left Retina -> Coincidence
     conn_init = pygenn.genn_model.init_connectivity(
         retina_L_coincidence_syn_init,
-        {"cam_height": cam_resize_height, "cam_width": cam_resize_width})
+        {"height": height, "width": width})
     retina_pos_L_coincidence_pos_syn = model.add_synapse_population(
         "retina_pos_L_coincidence_pos", "PROCEDURAL_GLOBALG", 0, retina_pos_L_nrn, coincidence_pos_nrn,
         "StaticPulse", {}, {"g": retina_coincidence_W}, {}, {},
@@ -108,7 +122,7 @@ def main(aedat_file_path,
     # Right Retina -> Coincidence
     conn_init = pygenn.genn_model.init_connectivity(
         retina_R_coincidence_syn_init,
-        {"cam_height": cam_resize_height, "cam_width": cam_resize_width})
+        {"height": height, "width": width})
     retina_pos_R_coincidence_pos_syn = model.add_synapse_population(
         "retina_pos_R_coincidence_pos", "PROCEDURAL_GLOBALG", 0, retina_pos_R_nrn, coincidence_pos_nrn,
         "StaticPulse", {}, {"g": retina_coincidence_W}, {}, {},
@@ -121,7 +135,7 @@ def main(aedat_file_path,
     # Excitatory Coincidence -> Disparity (plane of constant disparity)
     conn_init = pygenn.genn_model.init_connectivity(
         coincidence_disparity_exc_syn_init,
-        {"cam_height": cam_resize_height, "cam_width": cam_resize_width, "receptive_distance": receptive_distance})
+        {"height": height, "width": width, "receptive_distance": receptive_distance})
     coincidence_pos_disparity_exc_syn = model.add_synapse_population(
         "coincidence_pos_disparity_exc", "PROCEDURAL_GLOBALG", 0, coincidence_pos_nrn, disparity_nrn,
         "StaticPulse", {}, {"g": coincidence_disparity_exc_W}, {}, {},
@@ -134,7 +148,7 @@ def main(aedat_file_path,
     # Inhibitory Coincidence -> Disparity (plane of constant horizontal cyclopean position)
     conn_init = pygenn.genn_model.init_connectivity(
         coincidence_disparity_inh_syn_init,
-        {"cam_height": cam_resize_height, "cam_width": cam_resize_width, "receptive_distance": receptive_distance})
+        {"height": height, "width": width, "receptive_distance": receptive_distance})
     coincidence_pos_disparity_inh_syn = model.add_synapse_population(
         "coincidence_pos_disparity_inh", "PROCEDURAL_GLOBALG", 0, coincidence_pos_nrn, disparity_nrn,
         "StaticPulse", {}, {"g": coincidence_disparity_inh_W}, {}, {},
@@ -147,7 +161,7 @@ def main(aedat_file_path,
     # Inhibitory Recurrent Disparity -> Disparity
     conn_init = pygenn.genn_model.init_connectivity(
         disparity_disparity_inh_syn_init,
-        {"cam_height": cam_resize_height, "cam_width": cam_resize_width})
+        {"height": height, "width": width})
     disparity_disparity_inh_syn = model.add_synapse_population(
         "disparity_disparity_inh", "PROCEDURAL_GLOBALG", 0, disparity_nrn, disparity_nrn,
         disparity_disparity_inh_weight_update, {}, {}, {}, {},
@@ -160,13 +174,13 @@ def main(aedat_file_path,
 
     # Set retinae inputs
     def set_input(pos_L, neg_L, pos_R, neg_R):
-        retina_pos_L_nrn.vars["input"].view.reshape(cam_resize_height, cam_resize_width)[:] = pos_L
+        retina_pos_L_nrn.vars["input"].view.reshape(height, width)[:] = pos_L
         retina_pos_L_nrn.push_var_to_device("input")
-        retina_neg_L_nrn.vars["input"].view.reshape(cam_resize_height, cam_resize_width)[:] = neg_L
+        retina_neg_L_nrn.vars["input"].view.reshape(height, width)[:] = neg_L
         retina_neg_L_nrn.push_var_to_device("input")
-        retina_pos_R_nrn.vars["input"].view.reshape(cam_resize_height, cam_resize_width)[:] = pos_R
+        retina_pos_R_nrn.vars["input"].view.reshape(height, width)[:] = pos_R
         retina_pos_R_nrn.push_var_to_device("input")
-        retina_neg_R_nrn.vars["input"].view.reshape(cam_resize_height, cam_resize_width)[:] = neg_R
+        retina_neg_R_nrn.vars["input"].view.reshape(height, width)[:] = neg_R
         retina_neg_R_nrn.push_var_to_device("input")
 
     # Coordinate mapping
@@ -181,28 +195,125 @@ def main(aedat_file_path,
 
     # Neuron coordinates to index
     def coordinates_to_index(coordinates):
-        i = coordinates["y"] * cam_resize_width**2 + coordinates["x_L"] * cam_resize_width + coordinates["x_R"]
+        i = coordinates["y"] * width**2 + coordinates["x_L"] * width + coordinates["x_R"]
         return i
 
     # Neuron index to coordinates
     def index_to_coordinates(i):
         coordinates = {}
-        coordinates["y"] = (i // cam_resize_width) // cam_resize_width
-        coordinates["x_L"] = (i // cam_resize_width) % cam_resize_width
-        coordinates["x_R"] = i % cam_resize_width
+        coordinates["y"] = (i // width) // width
+        coordinates["x_L"] = (i // width) % width
+        coordinates["x_R"] = i % width
         return coordinates
+
+    # Process output spikes
+    def process_polarised_spikes(spikes):
+
+        # Convert spikes to event coordinates and disparity.
+        c = index_to_coordinates(spikes)
+        d = np.absolute(c["x_L"] - c["x_R"])
+
+        # Clip events' disparity to range of interest.
+        d = d - disparity_offset
+        d[d < 0] = 0
+        d[d >= disparity_range] = disparity_range - 1
+
+
+
+        # TODO: DEBUG POS/NEG DISPARITY OVERWRITING
+
+        # print()
+        # print()
+        # print()
+        # if spikes is pos_spikes:
+        #     print("POSITIVE")
+        # elif spikes is neg_spikes:
+        #     print("NEGATIVE")
+
+        # if stereo_disparity_L[c["y"], c["x_L"]] == -1:
+        #     print("GOOD")
+        # else:
+        #     print("BAD")
+        #     print("  A", stereo_disparity_L[c["y"], c["x_L"]])
+        #     print("  B", d)
+
+
+
+        # Record event disparity.
+        stereo_disparity_L[c["y"], c["x_L"]] = d
+        stereo_disparity_R[c["y"], c["x_R"]] = d
+        cyclopean_disparity[c["y"], (c["x_L"] + c["x_R"]) // 2] = d
+
+
+
+        # TODO: DRDS ACCUMULATOR EXPERIMENTS
+        accumulator[c["y"], (c["x_L"] + c["x_R"]) // 2, d] += 1
+
+
+
 
 
     # Output frames
-    output = np.empty((cam_resize_height, cam_resize_width * 2, 3), dtype="float32")
-    output_L = output[:cam_resize_height, :cam_resize_width]
-    output_R = output[:cam_resize_height, cam_resize_width:]
+    stereo_disparity = np.empty((height, width * 2), dtype=np.int32)
+    stereo_disparity_L = stereo_disparity[:height, :width]
+    stereo_disparity_R = stereo_disparity[:height, width:]
+    stereo_image = np.empty((height, width * 2, 3), dtype=np.float32)
+    stereo_image_L = stereo_image[:height, :width]
+    stereo_image_R = stereo_image[:height, width:]
+    cyclopean_disparity = np.empty((height, width), dtype=np.int32)
+    cyclopean_image = np.empty((height, width, 3), dtype=np.float32)
 
+    # Tune disparity range for plot
+
+
+    # # TODO: DRDS (disparity_scale = 1.0)
+    # disparity_lo = 56
+    # disparity_hi = 196
+
+    # # TODO: DRDS (disparity_scale = 0.5)
+    # disparity_lo = 28
+    # disparity_hi = 98
+
+    # TODO: DRDS (disparity_scale = 0.25)
+    disparity_lo = 14
+    disparity_hi = 49
+
+    # # TODO: DRDS (disparity_scale = 0.1)
+    # disparity_lo = 6
+    # disparity_hi = 20
+
+
+    disparity_offset = disparity_lo
+    disparity_range = disparity_hi + 1 - disparity_offset
+
+    # Colour mapping for plot
+    cmap_B = np.linspace(1.0, 0.0, disparity_range, dtype=np.float32)
+    cmap_G = np.zeros(disparity_range, dtype=np.float32)
+    cmap_R = np.linspace(0.0, 1.0, disparity_range, dtype=np.float32)
+    cmap = np.vstack([cmap_B, cmap_G, cmap_R]).T
+
+    # Create output video files
     if record_video:
-        video_file_name = "stereo_3d_video.avi"
-        video_file = cv2.VideoWriter(
-            video_file_name, cv2.VideoWriter_fourcc(*"MJPG"),
-            1000000 / interval_usec, (cam_resize_width * 2, cam_resize_height))
+        stereo_video_file_name = "stereo_video.avi"
+        stereo_video_file = cv2.VideoWriter(
+            stereo_video_file_name, cv2.VideoWriter_fourcc(*"MJPG"),
+            1000000 / interval_usec, (width * 2, height))
+        cyclopean_video_file_name = "cyclopean_video.avi"
+        cyclopean_video_file = cv2.VideoWriter(
+            cyclopean_video_file_name, cv2.VideoWriter_fourcc(*"MJPG"),
+            1000000 / interval_usec, (width, height))
+
+
+
+
+
+
+    # TODO: DRDS ACCUMULATOR EXPERIMENTS
+    accumulator = np.zeros((height, width, disparity_range), dtype=np.int64)
+
+
+
+
 
     # Simulate model
     for pos_L, neg_L, pos_R, neg_R in f:
@@ -219,57 +330,180 @@ def main(aedat_file_path,
         coincidence_neg_spikes = coincidence_neg_nrn.current_spikes
         disparity_spikes = disparity_nrn.current_spikes
 
-        # Filter spikes (handles broadly tuned cyclopean distance)
+        # Filter spikes
         pos_spikes = np.intersect1d(coincidence_pos_spikes, disparity_spikes)
         neg_spikes = np.intersect1d(coincidence_neg_spikes, disparity_spikes)
 
-        # Tune plot range
-        event_offset = 10
-        event_range = 10
+        # Clear disparity frames (no events where disparity == -1)
+        stereo_disparity.fill(-1)
+        cyclopean_disparity.fill(-1)
 
-        # Plot colour mapping
-        cmap_B = np.linspace(0.0, 1.0, event_range, dtype="float32")
-        cmap_G = np.zeros(event_range, dtype="float32")
-        cmap_R = np.linspace(1.0, 0.0, event_range, dtype="float32")
-        cmap = np.vstack([cmap_B, cmap_G, cmap_R]).T
 
-        output_L.fill(1.0)
-        output_R.fill(1.0)
 
-        for spike_i in pos_spikes:
-            c = index_to_coordinates(spike_i)
-            d = np.abs(c["x_R"] - c["x_L"])
-            event_distance = event_offset + (event_range - d)
-            if event_distance < 0:
-                event_distance = 0
-            elif event_distance >= event_range:
-                event_distance = event_range - 1
-            output_L[c["y"], c["x_L"]] = cmap[event_distance]
-            output_R[c["y"], c["x_R"]] = cmap[event_distance]
 
-        for spike_i in neg_spikes:
-            c = index_to_coordinates(spike_i)
-            d = np.abs(c["x_R"] - c["x_L"])
-            event_distance = event_offset + (event_range - d)
-            if event_distance < 0:
-                event_distance = 0
-            elif event_distance >= event_range:
-                event_distance = event_range - 1
-            output_L[c["y"], c["x_L"]] = cmap[event_distance]
-            output_R[c["y"], c["x_R"]] = cmap[event_distance]
 
+        # TODO: ORIGINAL CODE: THIS WORKS FOR THE AEDAT FILE IN THE REPO
+
+        # # Tune plot range
+        # disparity_offset = 10
+        # disparity_range = 10
+
+        # # Plot colour mapping
+        # cmap_B = np.linspace(0.0, 1.0, disparity_range, dtype=np.float32)
+        # cmap_G = np.zeros(disparity_range, dtype=np.float32)
+        # cmap_R = np.linspace(1.0, 0.0, disparity_range, dtype=np.float32)
+        # cmap = np.vstack([cmap_B, cmap_G, cmap_R]).T
+
+        # # Clear output frames
+        # stereo_image.fill(1.0)
+        # cyclopean_image.fill(1.0)
+
+        # for spike_i in pos_spikes:
+        #     c = index_to_coordinates(spike_i)
+        #     d = np.absolute(c["x_L"] - c["x_R"])
+        #     d = disparity_offset + (disparity_range - d)
+        #     if d < 0:
+        #         d = 0
+        #     elif d >= disparity_range:
+        #         d = disparity_range - 1
+        #     stereo_image_L[c["y"], c["x_L"]] = cmap[d]
+        #     stereo_image_R[c["y"], c["x_R"]] = cmap[d]
+
+        # for spike_i in neg_spikes:
+        #     c = index_to_coordinates(spike_i)
+        #     d = np.absolute(c["x_L"] - c["x_R"])
+        #     d = disparity_offset + (disparity_range - d)
+        #     if d < 0:
+        #         d = 0
+        #     elif d >= disparity_range:
+        #         d = disparity_range - 1
+        #     stereo_image_L[c["y"], c["x_L"]] = cmap[d]
+        #     stereo_image_R[c["y"], c["x_R"]] = cmap[d]
+
+
+
+
+
+
+
+
+
+        process_polarised_spikes(pos_spikes)
+        process_polarised_spikes(neg_spikes)
+
+
+
+
+
+        # TODO: HANDLE CLOSE AND FAR EVENTS OVERWRITING EACH OTHER
+        # IT HAPPENS, BUT MOSTLY DOESN'T
+
+        # WHICH DISPARITY DOMINATES, IF ANY ???
+        # WHICH DISPARITY *SHOULD* DOMINATE ???
+
+
+
+
+
+
+        # Compute stereo images (where disparity is not -1).
+        stereo_image.fill(1.0)
+        idx = stereo_disparity_L != -1
+        stereo_image_L[idx] = cmap[stereo_disparity_L[idx]]
+        idx = stereo_disparity_R != -1
+        stereo_image_R[idx] = cmap[stereo_disparity_R[idx]]
+
+        # Compute cyclopean image (where disparity is not -1).
+        cyclopean_image.fill(1.0)
+        idx = cyclopean_disparity != -1
+        cyclopean_image[idx] = cmap[cyclopean_disparity[idx]]
+
+        # Record output frames
         if record_video:
-            video_frame = (output * 255).astype("uint8")
-            video_file.write(video_frame)
+            stereo_video_frame = (stereo_image * 255).astype(np.uint8)
+            stereo_video_file.write(stereo_video_frame)
+            cyclopean_video_frame = (cyclopean_image * 255).astype(np.uint8)
+            cyclopean_video_file.write(cyclopean_video_frame)
 
-        cv2.imshow("output", output)
+        # Plot outputs and handle interrupt
+        cv2.imshow("Stereo Output", stereo_image)
+        cv2.imshow("Cyclopean Output", cyclopean_image)
         k = cv2.waitKey(1)
         if k == ord("q"):
-            cv2.destroyWindow("output")
+            cv2.destroyWindow("Stereo Output")
+            cv2.destroyWindow("Cyclopean Output")
             exit(0)
 
+    # Release output video files
     if record_video:
-        video_file.release()
+        stereo_video_file.release()
+        cyclopean_video_file.release()
+
+
+
+
+    # TODO: DRDS ACCUMULATOR EXPERIMENTS
+
+
+
+    import matplotlib.pyplot as plt
+    import matplotlib.cm as cm
+
+
+
+    print(disparity_range)
+
+
+    accumulator_bound = accumulator.max() + 1
+
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection="3d")
+    colours = cm.hot(np.linspace(0, 1, accumulator_bound))
+
+    for i in range(1, accumulator_bound):
+    #for i in range(1, 10):
+    #for i in range(20, accumulator_bound):
+        row, col, depth = np.nonzero(accumulator == i)
+        ax.scatter(row, col, depth, marker=".", color=colours[i])
+
+    plt.show()
+
+
+
+
+    # # TODO: THE BELOW STATS WON'T WORK
+    # # WE WANT MORE LIKE A PIXELWISE HISTOGRAM OR 3D SCATTER PLOT
+
+    # plt.figure()
+    # accumulator_min = accumulator.min(axis=2)
+    # plt.imshow(accumulator_min)
+    # plt.title("Disparity Min")
+    # plt.colorbar()
+
+    # plt.figure()
+    # accumulator_max = accumulator.max(axis=2)
+    # plt.imshow(accumulator_max)
+    # plt.title("Disparity Max")
+    # plt.colorbar()
+
+    # plt.figure()
+    # accumulator_mean = accumulator.mean(axis=2)
+    # plt.imshow(accumulator_mean)
+    # plt.title("Disparity Mean")
+    # plt.colorbar()
+
+    # plt.figure()
+    # accumulator_std = accumulator.std(axis=2)
+    # plt.imshow(accumulator_std)
+    # plt.title("Disparity Std")
+    # plt.colorbar()
+
+    # plt.show()
+
+
+
+
 
 
 if __name__  == "__main__":
@@ -278,13 +512,13 @@ if __name__  == "__main__":
     # Argument parser
     parser = argparse.ArgumentParser(description="pygenn_stereo_3d")
 
-    # Recording parameters
-    parser.add_argument("aedat_file_path", type=str)
-    parser.add_argument("--calibration-path", type=str, default="./calibration")
+    # Input parameters
+    parser.add_argument("--aedat-file-path", type=str, default=None)
+    parser.add_argument("--calibration-path", type=str, default=None)
     parser.add_argument("--cam-height", type=int, default=260)
     parser.add_argument("--cam-width", type=int, default=346)
-    parser.add_argument("--cam-resize-height", type=int, default=260)
-    parser.add_argument("--cam-resize-width", type=int, default=346)
+    parser.add_argument("--height", type=int, default=260)
+    parser.add_argument("--width", type=int, default=346)
     parser.add_argument("--skip-usec", type=int, default=1600000)
     parser.add_argument("--interval-usec", type=int, default=5000)
     parser.add_argument("--record-video", type=bool, default=False)
